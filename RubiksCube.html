@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>3D Rubik's Cube — Robust Face Rotation Fix</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin:0; font-family:Inter,system-ui,Arial,sans-serif; background:#f0f0f0; overflow:hidden; }
+    canvas { display:block; }
+    #ui {
+      position: absolute; left: 18px; top: 18px; z-index: 200;
+      display:flex; flex-direction:column; gap:12px; align-items:flex-start;
+    }
+    .btn {
+      font-weight:700; padding:10px 14px; border-radius:8px; border:none; cursor:pointer;
+      background:#4f46e5; color:#fff;
+    }
+    .btn.secondary { background:#059669; }
+    #panel { background: rgba(255,255,255,0.95); padding:12px; border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,0.08); max-width:320px; }
+    #panel h3 { margin:0 0 8px 0; font-size:16px; }
+    #controls { display:flex; gap:8px; margin-bottom:8px; }
+    #info { font-size:13px; color:#374151; line-height:1.4; }
+    #history { margin-top:8px; max-height:180px; overflow:auto; font-size:13px; color:#111827; }
+    #moveList div { padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.03); }
+    #footer { font-size:12px; color:#6b7280; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div id="panel">
+      <div id="controls">
+        <button id="resetButton" class="btn">Reset</button>
+        <button id="scrambleButton" class="btn secondary">Scramble</button>
+      </div>
+      <h3>Controls</h3>
+      <div id="info">
+        <div><strong>Drag (mouse / touch):</strong> rotate cube</div>
+        <div>U/u: Top &nbsp; D/d: Bottom &nbsp; R/r: Right &nbsp; L/l: Left</div>
+        <div>F/f: Front &nbsp; B/b: Back</div>
+        <div style="margin-top:6px;"><em>(Lowercase = clockwise, Uppercase = counter-clockwise — from the face's viewpoint)</em></div>
+      </div>
+
+      <div id="history">
+        <strong>Move History</strong>
+        <div id="moveList" style="margin-top:8px;"></div>
+      </div>
+
+      <div id="footer">Speedcube colors: Up=Yellow, Down=White, Front=Green, Back=Blue, Right=Red, Left=Orange</div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    { "imports": { "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js" } }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ---------- Config ----------
+    const CUBIE_SIZE = 1;
+    const CUBIE_SPACING = 0.05;
+    const CUBIE_POS_DELTA = CUBIE_SIZE + CUBIE_SPACING;
+    const ANIMATION_SPEED = 0.06; // radians per frame
+
+    // ---------- Globals ----------
+    let scene, camera, renderer;
+    let cubeContainer, cubeGroup, pivotGroup;
+    let cubies = [];
+    let isAnimating = false;
+    let targetAnimation = null;
+    let moveQueue = [];
+    let isDragging = false;
+    let prevPointer = { x: 0, y: 0 };
+
+    // UI helpers
+    const moveListEl = () => document.getElementById('moveList');
+
+    // Use MeshBasicMaterial to avoid lighting affecting sticker visibility
+    const colors = {
+      yellow: new THREE.MeshBasicMaterial({ color: 0xffff00 }),
+      white:  new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      green:  new THREE.MeshBasicMaterial({ color: 0x00ff00 }),
+      blue:   new THREE.MeshBasicMaterial({ color: 0x0000ff }),
+      red:    new THREE.MeshBasicMaterial({ color: 0xff0000 }),
+      orange: new THREE.MeshBasicMaterial({ color: 0xffa500 }),
+      black:  new THREE.MeshBasicMaterial({ color: 0x333333 })
+    };
+
+    // Moves mapping: lowercase = clockwise from face POV
+    const moves = {
+      'r': { axis:'x', slice: 1, angle: -Math.PI/2, direction: -1 },
+      'l': { axis:'x', slice:-1, angle:  Math.PI/2, direction: -1 },
+      'u': { axis:'y', slice: 1, angle: -Math.PI/2, direction: -1 },
+      'd': { axis:'y', slice:-1, angle:  Math.PI/2, direction: -1 },
+      'f': { axis:'z', slice: 1, angle: -Math.PI/2, direction: -1 },
+      'b': { axis:'z', slice:-1, angle:  Math.PI/2, direction: -1 },
+      'R': { axis:'x', slice: 1, angle:  Math.PI/2, direction: 1 },
+      'L': { axis:'x', slice:-1, angle: -Math.PI/2, direction: 1 },
+      'U': { axis:'y', slice: 1, angle:  Math.PI/2, direction: 1 },
+      'D': { axis:'y', slice:-1, angle: -Math.PI/2, direction: 1 },
+      'F': { axis:'z', slice: 1, angle:  Math.PI/2, direction: 1 },
+      'B': { axis:'z', slice:-1, angle: -Math.PI/2, direction: 1 }
+    };
+
+    // Canonical normals for face names (cube-local coordinates)
+    const FACE_NORMALS = {
+      px: new THREE.Vector3( 1, 0, 0),
+      nx: new THREE.Vector3(-1, 0, 0),
+      py: new THREE.Vector3( 0, 1, 0),
+      ny: new THREE.Vector3( 0,-1, 0),
+      pz: new THREE.Vector3( 0, 0, 1),
+      nz: new THREE.Vector3( 0, 0,-1)
+    };
+
+    const CANONICAL = ['px','nx','py','ny','pz','nz'];
+
+    // ---------- Init ----------
+    function init() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xf0f0f0);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+      camera.position.set(5,5,5);
+      camera.lookAt(0,0,0);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.body.appendChild(renderer.domElement);
+
+      // Lights (materials are unlit, lights don't affect stickers)
+      const ambient = new THREE.AmbientLight(0xffffff, 0.4); scene.add(ambient);
+      const dir = new THREE.DirectionalLight(0xffffff, 0.6); dir.position.set(5,10,8); scene.add(dir);
+
+      // Groups: container holds cubeGroup and pivotGroup so pivot rotates with container rotations
+      cubeContainer = new THREE.Group();
+      cubeGroup = new THREE.Group();
+      pivotGroup = new THREE.Group();
+      cubeContainer.add(cubeGroup);
+      cubeContainer.add(pivotGroup);
+      scene.add(cubeContainer);
+
+      // UI events
+      document.getElementById('resetButton').addEventListener('click', resetCube);
+      document.getElementById('scrambleButton').addEventListener('click', scrambleCube);
+      document.addEventListener('keydown', onKeyDown);
+
+      // Pointer & touch
+      renderer.domElement.addEventListener('mousedown', onPointerDown);
+      window.addEventListener('mousemove', onPointerMove);
+      window.addEventListener('mouseup', onPointerUp);
+      renderer.domElement.addEventListener('touchstart', onTouchStart, {passive:false});
+      window.addEventListener('touchmove', onTouchMove, {passive:false});
+      window.addEventListener('touchend', onTouchEnd);
+
+      window.addEventListener('resize', onWindowResize);
+
+      // build cube and initial rotation
+      createCube();
+      cubeContainer.rotation.set(-0.4, 0.7, 0);
+
+      animate();
+    }
+
+    // ---------- Create cube ----------
+    function createCube() {
+      cubeGroup.clear();
+      pivotGroup.clear();
+      cubies = [];
+      clearMoveHistoryUI();
+
+      const coords = [-1,0,1];
+      for (const x of coords) {
+        for (const y of coords) {
+          for (const z of coords) {
+            if (x === 0 && y === 0 && z === 0) continue;
+            const cubie = makeCubie(x,y,z);
+            cubie.userData.posKey = `${x},${y},${z}`;
+            cubeGroup.add(cubie);
+            cubies.push(cubie);
+          }
+        }
+      }
+      refreshCubieMaterials();
+    }
+
+    function makeCubie(x,y,z) {
+      const geo = new THREE.BoxGeometry(CUBIE_SIZE, CUBIE_SIZE, CUBIE_SIZE);
+      const baseMats = [colors.black, colors.black, colors.black, colors.black, colors.black, colors.black];
+      const mesh = new THREE.Mesh(geo, baseMats);
+      mesh.position.set(x*CUBIE_POS_DELTA, y*CUBIE_POS_DELTA, z*CUBIE_POS_DELTA);
+
+      // store sticker colors on the cubie itself (local logical state)
+      mesh.userData.faces = {
+        px: (x===1)?'red':'black',    // +X Right
+        nx: (x===-1)?'orange':'black',// -X Left
+        py: (y===1)?'yellow':'black', // +Y Up
+        ny: (y===-1)?'white':'black', // -Y Down
+        pz: (z===1)?'green':'black',  // +Z Front
+        nz: (z===-1)?'blue':'black'   // -Z Back
+      };
+
+      return mesh;
+    }
+
+    function refreshCubieMaterials() {
+      for (const c of cubies) {
+        const f = c.userData.faces;
+        const mats = [
+          colors[f.px] || colors.black,
+          colors[f.nx] || colors.black,
+          colors[f.py] || colors.black,
+          colors[f.ny] || colors.black,
+          colors[f.pz] || colors.black,
+          colors[f.nz] || colors.black
+        ];
+        c.material = mats;
+        for (const m of mats) m.needsUpdate = true;
+        c.rotation.set(0,0,0);
+      }
+    }
+
+    // ---------- Animation loop ----------
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (isAnimating && targetAnimation) {
+        const a = targetAnimation;
+        const remaining = a.angle - a.currentAngle;
+        const step = (a.angle > 0) ? ANIMATION_SPEED : -ANIMATION_SPEED;
+
+        if (Math.abs(remaining) <= Math.abs(step)) {
+          // finalize visual rotation
+          pivotGroup.rotation[a.axis] = a.angle;
+          pivotGroup.updateMatrixWorld(true);
+
+          // detach cubies back to cubeGroup preserving world transform
+          for (const c of a.cubies) {
+            cubeGroup.attach(c);
+            const newX = Math.round(c.position.x / CUBIE_POS_DELTA);
+            const newY = Math.round(c.position.y / CUBIE_POS_DELTA);
+            const newZ = Math.round(c.position.z / CUBIE_POS_DELTA);
+            c.position.set(newX * CUBIE_POS_DELTA, newY * CUBIE_POS_DELTA, newZ * CUBIE_POS_DELTA);
+            c.userData.posKey = `${newX},${newY},${newZ}`;
+          }
+
+          // reset pivot rotation
+          pivotGroup.rotation.set(0,0,0);
+
+          // Robust sticker permutation: rotate face normals and remap
+          applyFaceRotationToCubiesByNormal(a.cubies, a.axis, a.moveKey);
+
+          // refresh visuals
+          refreshCubieMaterials();
+
+          // history
+          pushMoveHistory(a.moveKey);
+
+          // cleanup
+          isAnimating = false;
+          targetAnimation = null;
+
+          // next queued move
+          if (moveQueue.length > 0) {
+            const next = moveQueue.shift();
+            performMove(next);
+          }
+        } else {
+          pivotGroup.rotation[a.axis] += step;
+          a.currentAngle += step;
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    // ---------- Robust permutation using rotated normals ----------
+    // rotate each canonical normal by the move rotation, then map old face color -> nearest canonical face
+    function applyFaceRotationToCubiesByNormal(cubieList, axis, moveKey) {
+      // determine angle: lowercase = clockwise from face POV
+      // For rotation direction we must pick angle consistent with visual rotation used (moves[moveKey].angle)
+      const mv = moves[moveKey];
+      if (!mv) return;
+      const angle = mv.angle; // uses the same angle as the visual
+
+      // axis vector in cube-local coordinates
+      const axisVec = (axis === 'x') ? new THREE.Vector3(1,0,0) : (axis === 'y') ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+
+      for (const cubie of cubieList) {
+        const old = {...cubie.userData.faces}; // copy of old colors
+        // We'll build a mapping newFaces[faceName] = color
+        const newFaces = { px:'black', nx:'black', py:'black', ny:'black', pz:'black', nz:'black' };
+
+        // For each original face key, compute its normal (in cubie local coords)
+        for (const faceKey of CANONICAL) {
+          const origNormal = FACE_NORMALS[faceKey].clone(); // e.g., (1,0,0)
+          // rotate that normal around axisVec by angle (axisVec is cube-local)
+          const rotated = origNormal.clone();
+          rotated.applyAxisAngle(axisVec, angle);
+
+          // Now find which canonical normal the rotated vector corresponds to (closest by dot product)
+          let best = null;
+          let bestDot = -Infinity;
+          for (const cand of CANONICAL) {
+            const candVec = FACE_NORMALS[cand];
+            const dot = rotated.dot(candVec); // since vectors are unit, dot near 1 means match
+            if (dot > bestDot) { bestDot = dot; best = cand; }
+          }
+
+          // Assign the original face's color to the matched canonical face
+          newFaces[best] = old[faceKey];
+        }
+
+        // commit new faces
+        cubie.userData.faces = newFaces;
+      }
+    }
+
+    // ---------- Input handling ----------
+    function onPointerDown(e) {
+      if (isAnimating) return;
+      if (e.target !== renderer.domElement) return;
+      isDragging = true;
+      prevPointer.x = e.clientX;
+      prevPointer.y = e.clientY;
+    }
+    function onPointerMove(e) {
+      if (!isDragging || isAnimating) return;
+      const dx = e.clientX - prevPointer.x;
+      const dy = e.clientY - prevPointer.y;
+      const speed = 0.005;
+      cubeContainer.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -dx * speed);
+      cubeContainer.rotateOnWorldAxis(new THREE.Vector3(1,0,0), -dy * speed);
+      prevPointer.x = e.clientX;
+      prevPointer.y = e.clientY;
+    }
+    function onPointerUp() { isDragging = false; }
+
+    function onTouchStart(ev) {
+      if (isAnimating) return;
+      if (!ev.touches || ev.touches.length === 0) return;
+      ev.preventDefault();
+      isDragging = true;
+      prevPointer.x = ev.touches[0].clientX;
+      prevPointer.y = ev.touches[0].clientY;
+    }
+    function onTouchMove(ev) {
+      if (!isDragging || isAnimating) return;
+      if (!ev.touches || ev.touches.length === 0) return;
+      ev.preventDefault();
+      const tx = ev.touches[0].clientX;
+      const ty = ev.touches[0].clientY;
+      const dx = tx - prevPointer.x;
+      const dy = ty - prevPointer.y;
+      const speed = 0.005;
+      cubeContainer.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -dx * speed);
+      cubeContainer.rotateOnWorldAxis(new THREE.Vector3(1,0,0), -dy * speed);
+      prevPointer.x = tx;
+      prevPointer.y = ty;
+    }
+    function onTouchEnd() { isDragging = false; }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onKeyDown(e) {
+      if (!moves[e.key]) return;
+      queueMove(e.key);
+    }
+
+    // ---------- Move queue & execution ----------
+    function queueMove(moveKey) {
+      if (isAnimating || moveQueue.length > 0) moveQueue.push(moveKey);
+      else performMove(moveKey);
+    }
+
+    function performMove(moveKey) {
+      const mv = moves[moveKey];
+      if (!mv) return;
+      // find cubies whose local cubeGroup position matches slice
+      const sliceCubies = cubies.filter(c => Math.round(c.position[mv.axis] / CUBIE_POS_DELTA) === mv.slice);
+      if (sliceCubies.length === 0) return;
+      // attach to pivotGroup
+      for (const c of sliceCubies) pivotGroup.attach(c);
+      isAnimating = true;
+      targetAnimation = { axis: mv.axis, angle: mv.angle, cubies: sliceCubies, currentAngle: 0, moveKey: moveKey, direction: mv.direction };
+    }
+
+    // ---------- History UI ----------
+    function pushMoveHistory(k) {
+      const el = moveListEl();
+      const row = document.createElement('div');
+      row.textContent = k;
+      el.appendChild(row);
+      el.scrollTop = el.scrollHeight;
+    }
+    function clearMoveHistoryUI() {
+      moveListEl().innerHTML = '';
+    }
+
+    // ---------- Reset & scramble ----------
+    function resetCube() {
+      if (isAnimating) return;
+      moveQueue.length = 0;
+      createCube();
+      cubeContainer.rotation.set(-0.4, 0.7, 0);
+      clearMoveHistoryUI();
+    }
+
+    function scrambleCube() {
+      if (isAnimating || moveQueue.length > 0) return;
+      const keys = Object.keys(moves);
+      const length = 18;
+      const seq = [];
+      for (let i=0;i<length;i++) {
+        let k;
+        do { k = keys[Math.floor(Math.random()*keys.length)]; }
+        while (i>0 && areInverse(k, seq[i-1]));
+        seq.push(k);
+      }
+      if (!isAnimating && moveQueue.length===0) {
+        const first = seq.shift();
+        performMove(first);
+        moveQueue.push(...seq);
+      } else {
+        moveQueue.push(...seq);
+      }
+    }
+
+    function areInverse(a,b) {
+      if (!a || !b) return false;
+      return a.toLowerCase() === b.toLowerCase() &&
+        ((a === a.toLowerCase() && b === b.toUpperCase()) || (a === a.toUpperCase() && b === b.toLowerCase()));
+    }
+
+    // ---------- Start ----------
+    init();
+  </script>
+</body>
+</html>
