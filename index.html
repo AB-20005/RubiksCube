@@ -7,12 +7,52 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
 
+        :root {
+            --bg-gradient: radial-gradient(circle at center, #2b2b2b 0%, #1a1a1a 100%);
+            --text-color: white;
+            --panel-bg: rgba(0, 0, 0, 0.5);
+            --panel-border: rgba(255, 255, 255, 0.1);
+            --key-hint-bg: rgba(255,255,255,0.2);
+            --btn-bg: transparent;
+            --btn-border: rgba(255,255,255,0.3);
+            --btn-text: white;
+            --btn-hover-bg: white;
+            --btn-hover-text: #1a1a1a;
+            --accent-color: #00d2ff;
+            --accent-hover: #57e0ff;
+            --accent-text: #000;
+            --history-badge-bg: rgba(255,255,255,0.1);
+            --history-badge-text: white;
+            --virtual-btn-bg: rgba(255,255,255,0.05);
+            --virtual-btn-hover: rgba(255,255,255,0.2);
+        }
+
+        body.light-mode {
+            --bg-gradient: radial-gradient(circle at center, #f5f5f5 0%, #e0e0e0 100%);
+            --text-color: #1a1a1a;
+            --panel-bg: rgba(255, 255, 255, 0.7);
+            --panel-border: rgba(0, 0, 0, 0.1);
+            --key-hint-bg: rgba(0,0,0,0.1);
+            --btn-border: rgba(0,0,0,0.2);
+            --btn-text: #1a1a1a;
+            --btn-hover-bg: #1a1a1a;
+            --btn-hover-text: white;
+            --accent-color: #007aff;
+            --accent-hover: #0056b3;
+            --accent-text: white;
+            --history-badge-bg: rgba(0,0,0,0.05);
+            --history-badge-text: #1a1a1a;
+            --virtual-btn-bg: rgba(0,0,0,0.05);
+            --virtual-btn-hover: rgba(0,0,0,0.15);
+        }
+
         body {
             margin: 0;
             overflow: hidden;
-            background: radial-gradient(circle at center, #2b2b2b 0%, #1a1a1a 100%);
+            background: var(--bg-gradient);
             font-family: 'Inter', sans-serif;
-            color: white;
+            color: var(--text-color);
+            transition: background 0.3s, color 0.3s;
         }
 
         #canvas-container {
@@ -29,18 +69,19 @@
             display: flex;
             gap: 15px;
             z-index: 10;
-            background: rgba(255, 255, 255, 0.1);
+            background: var(--panel-bg);
             backdrop-filter: blur(10px);
             padding: 15px 25px;
             border-radius: 50px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid var(--panel-border);
+            transition: background 0.3s;
         }
 
         button {
-            background: transparent;
-            border: 1px solid rgba(255,255,255,0.3);
-            color: white;
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-border);
+            color: var(--btn-text);
             padding: 10px 20px;
             border-radius: 25px;
             cursor: pointer;
@@ -48,22 +89,44 @@
             text-transform: uppercase;
             font-size: 0.8rem;
             transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         button:hover {
-            background: white;
-            color: #1a1a1a;
-            box-shadow: 0 0 15px rgba(255,255,255,0.5);
+            background: var(--btn-hover-bg);
+            color: var(--btn-hover-text);
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
         }
 
         button.accent {
-            background: #00d2ff;
-            border-color: #00d2ff;
-            color: #000;
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: var(--accent-text);
         }
         
         button.accent:hover {
-            background: #57e0ff;
+            background: var(--accent-hover);
+        }
+
+        /* Toggle Button */
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            backdrop-filter: blur(5px);
         }
 
         /* Instructions */
@@ -71,19 +134,22 @@
             position: absolute;
             top: 20px;
             left: 20px;
-            background: rgba(0, 0, 0, 0.5);
+            background: var(--panel-bg);
             padding: 15px;
             border-radius: 12px;
             backdrop-filter: blur(5px);
             pointer-events: none;
             user-select: none;
             max-width: 250px;
+            border: 1px solid var(--panel-border);
+            transition: background 0.3s;
         }
         .instructions h1 { margin: 0 0 5px 0; font-size: 1.2rem; }
         .instructions p { margin: 0 0 5px 0; font-size: 0.85rem; opacity: 0.8; }
+        
         .key-hint {
             display: inline-block;
-            background: rgba(255,255,255,0.2);
+            background: var(--key-hint-bg);
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 0.7rem;
@@ -94,23 +160,33 @@
         /* History Panel */
         .history-panel {
             position: absolute;
-            top: 160px; /* Below instructions */
+            top: 160px; 
             left: 20px;
             width: 180px;
             max-height: 300px;
-            background: rgba(0, 0, 0, 0.5);
+            background: var(--panel-bg);
             backdrop-filter: blur(5px);
             border-radius: 12px;
             padding: 15px;
             display: flex;
             flex-direction: column;
-            pointer-events: auto; /* Allow scrolling */
+            pointer-events: auto;
+            border: 1px solid var(--panel-border);
+            transition: opacity 0.3s, transform 0.3s;
+            transform-origin: top left;
         }
+        
+        .history-panel.hidden {
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.9);
+        }
+
         .history-header {
             font-size: 0.9rem;
             font-weight: 700;
             margin-bottom: 10px;
-            color: #00d2ff;
+            color: var(--accent-color);
             text-transform: uppercase;
             display: flex;
             justify-content: space-between;
@@ -124,20 +200,21 @@
             gap: 5px;
             align-content: flex-start;
             padding-right: 5px;
+            min-height: 50px;
         }
         /* Custom Scrollbar */
         .history-list::-webkit-scrollbar { width: 4px; }
-        .history-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 2px; }
+        .history-list::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.3); border-radius: 2px; }
         
         .move-badge {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.1);
+            background: var(--history-badge-bg);
+            border: 1px solid var(--panel-border);
             border-radius: 4px;
             padding: 4px 8px;
             font-size: 0.8rem;
             font-family: monospace;
             font-weight: bold;
-            color: white;
+            color: var(--history-badge-text);
             animation: popIn 0.2s ease-out;
         }
         @keyframes popIn {
@@ -145,7 +222,7 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
-        /* Virtual Keypad for touch/mouse users */
+        /* Virtual Keypad */
         .virtual-controls {
             position: absolute;
             right: 20px;
@@ -154,15 +231,16 @@
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 8px;
-            background: rgba(0,0,0,0.3);
+            background: var(--panel-bg);
             padding: 10px;
             border-radius: 12px;
             backdrop-filter: blur(5px);
+            border: 1px solid var(--panel-border);
         }
         .v-btn {
             width: 40px;
             height: 40px;
-            border: 1px solid rgba(255,255,255,0.2);
+            border: 1px solid var(--panel-border);
             border-radius: 8px;
             display: flex;
             align-items: center;
@@ -170,11 +248,12 @@
             cursor: pointer;
             font-weight: bold;
             font-size: 0.9rem;
-            background: rgba(255,255,255,0.05);
+            background: var(--virtual-btn-bg);
             transition: background 0.2s;
+            color: var(--text-color);
         }
         .v-btn:hover {
-            background: rgba(255,255,255,0.2);
+            background: var(--virtual-btn-hover);
         }
         .v-label {
             grid-column: span 2;
@@ -205,6 +284,9 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* Button Icons (Simple Unicode) */
+        .icon { font-size: 1.1em; line-height: 1; }
+
     </style>
 </head>
 <body>
@@ -213,6 +295,10 @@
         <div class="spinner"></div>
     </div>
 
+    <button class="theme-toggle" id="theme-toggle" title="Toggle Dark/Light Mode">
+        ☀️
+    </button>
+
     <div class="instructions">
         <h1>Speed Cube</h1>
         <p>Drag background to rotate view.</p>
@@ -220,14 +306,16 @@
         <p><span class="key-hint">Shift+Key</span> for counter-clockwise</p>
     </div>
 
-    <div class="history-panel">
-        <div class="history-header">Move History</div>
+    <div class="history-panel" id="history-panel">
+        <div class="history-header">
+            Move History
+        </div>
         <div class="history-list" id="history-list">
             <!-- Moves will appear here -->
         </div>
     </div>
 
-    <!-- Virtual Controls for ease of use -->
+    <!-- Virtual Controls -->
     <div class="virtual-controls">
         <div class="v-label">Face Controls</div>
         <div class="v-btn" onclick="window.rotateLayer('y', 1, -1)" title="Up">U</div>
@@ -245,8 +333,15 @@
     </div>
 
     <div class="ui-container">
-        <button onclick="scrambleCube()">Scramble</button>
-        <button class="accent" onclick="resetCube()">Reset</button>
+        <button onclick="toggleHistory()" id="history-btn">
+            <span class="icon">👁️</span> History
+        </button>
+        <button onclick="scrambleCube()">
+            <span class="icon">🎲</span> Scramble
+        </button>
+        <button class="accent" onclick="resetCube()">
+            <span class="icon">↺</span> Reset
+        </button>
     </div>
 
     <div id="canvas-container"></div>
@@ -268,10 +363,9 @@
 
         // --- Configuration ---
         const CUBE_SIZE = 1;
-        const SPACING = 0.02; // Gap between cubies
+        const SPACING = 0.02;
         const ANIMATION_SPEED = 0.15; 
 
-        // Speed Cube Colors (Standard Scheme)
         const COLORS = {
             CORE: 0x111111 // Black plastic
         };
@@ -289,7 +383,7 @@
         let scene, camera, renderer, controls;
         let allCubies = [];
         let isAnimating = false;
-        let pivotGroup; // Helper group for rotation
+        let pivotGroup; 
 
         init();
         animate();
@@ -339,6 +433,13 @@
             // 7. Events
             window.addEventListener('resize', onWindowResize);
             window.addEventListener('keydown', onKeyDown);
+            
+            // Theme Toggle Logic
+            document.getElementById('theme-toggle').addEventListener('click', () => {
+                document.body.classList.toggle('light-mode');
+                const btn = document.getElementById('theme-toggle');
+                btn.innerHTML = document.body.classList.contains('light-mode') ? '🌙' : '☀️';
+            });
 
             // Remove loading
             setTimeout(() => {
@@ -348,20 +449,30 @@
             }, 500);
         }
 
+        // History Toggle Logic
+        window.toggleHistory = function() {
+            const panel = document.getElementById('history-panel');
+            const btn = document.getElementById('history-btn');
+            panel.classList.toggle('hidden');
+            
+            // Update button visual state if needed (optional)
+            if (panel.classList.contains('hidden')) {
+                btn.style.opacity = "0.6";
+            } else {
+                btn.style.opacity = "1";
+            }
+        };
+
         function createRubiksCube() {
-            // Clear existing
             allCubies.forEach(c => scene.remove(c));
             allCubies = [];
 
-            // Geometry for a single cubie
             const geometry = new RoundedBoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE, 4, 0.1);
 
             for (let x = -1; x <= 1; x++) {
                 for (let y = -1; y <= 1; y++) {
                     for (let z = -1; z <= 1; z++) {
                         
-                        // Create materials
-                        // Order: Right, Left, Top, Bottom, Front, Back
                         const materials = [
                             new THREE.MeshStandardMaterial({ color: x === 1 ? FACE_COLORS.Right : COLORS.CORE, roughness: 0.2, metalness: 0.1 }), 
                             new THREE.MeshStandardMaterial({ color: x === -1 ? FACE_COLORS.Left : COLORS.CORE, roughness: 0.2, metalness: 0.1 }), 
@@ -372,15 +483,13 @@
                         ];
 
                         const cubie = new THREE.Mesh(geometry, materials);
-                        
-                        // Position with spacing
                         cubie.position.set(
                             x * (CUBE_SIZE + SPACING),
                             y * (CUBE_SIZE + SPACING),
                             z * (CUBE_SIZE + SPACING)
                         );
 
-                        cubie.userData = { x, y, z }; // Store logical initial position
+                        cubie.userData = { x, y, z }; 
                         cubie.castShadow = true;
                         cubie.receiveShadow = true;
 
@@ -391,11 +500,7 @@
             }
         }
 
-        // --- History & Notation Logic ---
-
         function getNotation(axis, layer, dir) {
-            // Convert axis/layer/dir to standard notation
-            // Mapping based on our rotateLayer logic
             if (axis === 'y' && layer === 1) return dir === -1 ? "U" : "U'";
             if (axis === 'y' && layer === -1) return dir === 1 ? "D" : "D'";
             if (axis === 'x' && layer === -1) return dir === 1 ? "L" : "L'";
@@ -411,16 +516,12 @@
             badge.className = 'move-badge';
             badge.innerText = notation;
             list.appendChild(badge);
-            // Auto scroll to bottom
             list.scrollTop = list.scrollHeight;
         }
-
-        // --- Rotation Logic ---
 
         function getCubiesOnAxis(axis, value) {
             const epsilon = 0.1;
             const positionValue = value * (CUBE_SIZE + SPACING);
-            
             return allCubies.filter(cubie => {
                 const worldPos = new THREE.Vector3();
                 cubie.getWorldPosition(worldPos);
@@ -428,29 +529,24 @@
             });
         }
 
-        // Exposed globally
         window.rotateLayer = function(axis, layerValue, direction, duration = 300) {
             if (isAnimating) return;
             isAnimating = true;
 
-            // Log the move
             const notation = getNotation(axis, layerValue, direction);
             logMove(notation);
 
             const targetCubies = getCubiesOnAxis(axis, layerValue);
             
-            // Reset pivot transform
             pivotGroup.rotation.set(0, 0, 0);
             pivotGroup.position.set(0, 0, 0);
             pivotGroup.updateMatrixWorld();
             
-            // Attach cubies
             targetCubies.forEach(cubie => {
                 pivotGroup.attach(cubie);
             });
 
-            // Animate
-            const targetAngle = (Math.PI / 2) * direction; // 90 degrees
+            const targetAngle = (Math.PI / 2) * direction; 
             const axisVector = new THREE.Vector3();
             axisVector[axis] = 1;
 
@@ -460,8 +556,6 @@
                 if (!startTime) startTime = time;
                 const elapsed = time - startTime;
                 const progress = Math.min(elapsed / duration, 1);
-
-                // Easing
                 const ease = progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
                 
                 const currentAngle = THREE.MathUtils.lerp(0, targetAngle, ease);
@@ -471,11 +565,9 @@
                 if (progress < 1) {
                     requestAnimationFrame(animateRotation);
                 } else {
-                    // Finish animation
                     const children = [...pivotGroup.children];
                     children.forEach(c => {
                         scene.attach(c);
-                        // Snap to grid
                         c.position.x = Math.round(c.position.x / (CUBE_SIZE + SPACING)) * (CUBE_SIZE + SPACING);
                         c.position.y = Math.round(c.position.y / (CUBE_SIZE + SPACING)) * (CUBE_SIZE + SPACING);
                         c.position.z = Math.round(c.position.z / (CUBE_SIZE + SPACING)) * (CUBE_SIZE + SPACING);
@@ -484,7 +576,6 @@
                         c.rotation.x = Math.round(euler.x / (Math.PI/2)) * (Math.PI/2);
                         c.rotation.y = Math.round(euler.y / (Math.PI/2)) * (Math.PI/2);
                         c.rotation.z = Math.round(euler.z / (Math.PI/2)) * (Math.PI/2);
-                        
                         c.updateMatrix();
                     });
                     
@@ -494,12 +585,9 @@
             requestAnimationFrame(animateRotation);
         };
 
-        // --- Inputs ---
-
         function onKeyDown(event) {
             const key = event.key.toUpperCase();
             const shift = event.shiftKey; 
-            const dir = shift ? 1 : -1; 
             
             switch(key) {
                 case 'U': window.rotateLayer('y', 1, -1 * (shift ? -1 : 1)); break; 
@@ -537,7 +625,6 @@
         };
 
         window.resetCube = function() {
-           // Clear History
            document.getElementById('history-list').innerHTML = '';
            createRubiksCube();
         };
